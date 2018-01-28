@@ -1,7 +1,9 @@
-from transform import identity
+from cardiovector.transform import identity
+
 
 def getindices(rec, sigs):
     return list(map(rec.signame.index, sigs))
+
 
 def plot_vcgs(records, labels, transform=identity, figsize=None):
     """

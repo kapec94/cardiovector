@@ -1,6 +1,5 @@
 import numpy as np
-from transform import identity
-from _lib import getindices
+from cardiovector.transform import identity
 
 
 def vcg_reconstruct_matrix(record, matrix, channels, nametransform=identity):
@@ -104,7 +103,6 @@ def pca_vcg(record):
     wfdb.Record
         Record object containing reconstructed VCG signal.
     """
-    from wfdb import Record
 
     sigs = dict(
         vx=['i', 'v5', 'v6'],
