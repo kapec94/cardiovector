@@ -1,5 +1,98 @@
 import numpy as np
+from sklearn.decomposition import PCA
+
 from cardiovector.transform import identity
+from ._lib import getindices, get_digital, validate_adac
+
+
+class ReconstructionBase:
+    def reconstruct(self, record):
+        from wfdb import Record
+
+        fmt, adcgain, baseline = validate_adac(record)
+        signal_indices = [record.signame.index(sig) for sig in self.channels()]
+
+        digital = get_digital(record)
+
+        input_vectors = digital[:, signal_indices]
+        output_vectors = self._reconstruct(input_vectors)
+        nsig = output_vectors.shape[1]
+
+        name = self._nametransform(record.recordname)
+        return Record(recordname=name,
+                      nsig=nsig, d_signals=output_vectors,
+                      fs=record.fs, siglen=record.siglen,
+                      fmt=[fmt] * nsig,
+                      adcgain=[adcgain] * nsig,
+                      baseline=[baseline] * nsig,
+                      signame=['vx', 'vy', 'vz'],
+                      units=['mV', 'mv', 'mv'])
+
+    def channels(self):
+        raise NotImplementedError()
+
+    def _nametransform(self, name):
+        return name
+
+    def _reconstruct(self, input_vectors):
+        raise NotImplementedError()
+
+
+class MatrixReconstruction(ReconstructionBase):
+    def __init__(self, channels, matrix, nametransform=identity):
+        if not hasattr(channels, '__iter__') or isinstance(channels, str):
+            raise ValueError('Channels must be non-empty array-like')
+
+        if len(channels) != matrix.shape[1]:
+            raise ValueError('Channel count must equal to MxN matrix M-dimension')
+
+        self._channels = channels
+        self._matrix = matrix
+        self._nametrans = nametransform
+
+    def matrix(self):
+        return self._matrix
+
+    def channels(self):
+        return self._channels
+
+    def _reconstruct(self, input_vectors):
+        return np.dot(self._matrix, input_vectors.T).A.T
+
+    def _nametransform(self, name):
+        return self._nametrans(name)
+
+
+pca_channels = ['i', 'v5', 'v6', 'ii', 'iii', 'avf', 'v1', 'v2', 'v3']
+
+
+class PcaReconstruction(ReconstructionBase):
+    def channels(self):
+        return pca_channels
+
+    def _reconstruct(self, input_vectors):
+        assert len(pca_channels) == 9
+        assert input_vectors.shape[1] == len(pca_channels)
+
+        sigs = {
+            'vx': input_vectors[:, 0:3],
+            'vy': input_vectors[:, 3:6],
+            'vz': input_vectors[:, 6:9]
+        }
+        output_vectors = list()
+
+        for sig in sigs.values():
+            output = self._sig_pca(sig)
+            output_vectors.append(output)
+
+        return np.array(output_vectors).T
+
+    @staticmethod
+    def _sig_pca(signals):
+        pca = PCA(n_components=1)
+        out = pca.fit_transform(signals)
+
+        return out[:, 0]
 
 
 def vcg_reconstruct_matrix(record, matrix, channels, nametransform=identity):
@@ -26,19 +119,8 @@ def vcg_reconstruct_matrix(record, matrix, channels, nametransform=identity):
         Record object containing reconstructed VCG signal.
     """
 
-    from wfdb import Record
-
-    signal_indices = [record.signame.index(sig) for sig in channels]
-    input_vectors = record.p_signals[:, signal_indices]
-
-    output_vectors = np.dot(matrix, input_vectors.T).A.T
-
-    recordname = nametransform(record.recordname)
-    return Record(recordname=recordname,
-                  nsig=3, p_signals=output_vectors,
-                  fs=record.fs, siglen=record.siglen,
-                  signame=['vx', 'vy', 'vz'],
-                  units=['mV', 'mv', 'mv'])
+    reconstruction = MatrixReconstruction(channels, matrix, nametransform)
+    return reconstruction.reconstruct(record)
 
 
 kors_channels = ['v1', 'v2', 'v3', 'v4', 'v5', 'v6', 'i', 'ii']
@@ -104,13 +186,8 @@ def pca_vcg(record):
         Record object containing reconstructed VCG signal.
     """
 
-    sigs = dict(
-        vx=['i', 'v5', 'v6'],
-        vy=['ii', 'iii', 'avf'],
-        vz=['v1', 'v2', 'v3'])
-
-    signal_indices = [(out_sig, record.signame.index(in_sigs)) for out_sig, in_sigs in sigs.items()]
-    input_vectors = record.p_signals[:, signal_indices]
+    reconstruction = PcaReconstruction()
+    return reconstruction.reconstruct(record)
 
 
 vcg_methods = ['kors', 'idt', 'pca']

@@ -3,7 +3,11 @@ from collections import namedtuple
 import matplotlib.pyplot as plt
 import numpy as np
 import wfdb
+from cycler import cycler
 from mpl_toolkits.mplot3d import Axes3D
+
+from cardiovector import transform
+from ._lib import iterfy, getindices, get_analog
 
 
 def _adjust_lim(lim, signal):
@@ -92,6 +96,26 @@ def _validate_plot_arg(plot):
     return plot
 
 
+def _signame_hash(signame):
+    return '#'.join(sorted(signame))
+
+
+def _validate_signals_arg(record, signals):
+    assert record is not None
+    record = iterfy(record)
+
+    assert len(record) > 0
+
+    if signals is None:
+        sigs = {_signame_hash(r.signame) for r in record}
+        if len(sigs) > 1:
+            raise ValueError('Records have different signal set. Don\'t know which to choose')
+
+        return sigs.pop()
+
+    return signals
+
+
 def plotvcg(record, signals=None,
             plot='3d',
             xlim=None, ylim=None, zlim=None,
@@ -138,15 +162,11 @@ def plotvcg(record, signals=None,
 
     assert isinstance(record, wfdb.Record)
 
-    if signals is None:
-        if record.nsig != 3:
-            raise ValueError('No explicit signal names provided; don\'t know which signals to choose')
-        signals = record.signame
+    signals = _validate_signals_arg(record, signals)
+    plot = _validate_plot_arg(plot)
 
     if len(signals) != 3:
         raise ValueError('Expected signals to contain three elements')
-
-    plot = _validate_plot_arg(plot)
 
     n = len(plot)
     if n == 4:
@@ -167,7 +187,7 @@ def plotvcg(record, signals=None,
     lims = dict()
     for k, s in zip(k_, signals):
         index = record.signame.index(s)
-        psig = record.p_signals.T[index]
+        psig = get_analog(record)[:, index].T
 
         data[k] = psig
         lims[k] = _adjust_lim(raw_lims[k], psig)
@@ -182,4 +202,79 @@ def plotvcg(record, signals=None,
         subplot = _subplot_id(nrows, ncols, i + 1)
         func(subplot, params, plot_kw)
 
+    return fig
+
+
+def plotrecs(record, signals=None, labels=None, sigtransform=None, fig_kw=None):
+    """
+    Plot multiple WFDB records.
+
+    Parameters
+    ----------
+    record : (N,) array-like of wfdb.Record objects
+        Iterable of records containing VCG signals.
+
+    signals : (M,) array-like of str, optional
+        Iterable of names of signals to plot. All the signals must be present in all records in `record` arg.
+
+    labels : (N,) array-like of str, optional
+        Labels to assign to plotted signals. By default this will be record names.
+
+    sigtransform : function(X -> ndarray) -> ndarray, optional
+        Function to call on every signal about to be plotted.
+
+    fig_kw : dict, optional
+        Additional positional arguments for creating a `matplotlib.pyplot.Figure` object.
+
+    Returns
+    -------
+    matplotlib.pyplot.Figure
+        Object containing plotted VCG signals.
+    """
+
+    # TODO: read units from record files
+
+    record = iterfy(record)
+    signals = _validate_signals_arg(record, signals)
+
+    fig_kw = fig_kw or dict()
+    sigtransform = sigtransform or transform.identity
+
+    if labels is not None:
+        assert (len(record) == len(labels))
+    else:
+        labels = [r.recordname for r in record]
+
+    if len({r.fs for r in record}) != 1:
+        raise ValueError('Records have different sampling rates. Will not continue!')
+
+    fs = record[0].fs
+    siglen = np.max([r.siglen for r in record])
+    indices = [getindices(rec, signals) for rec in record]
+
+    sigs = [get_analog(rec) for rec in record]
+    vcgs = [sig[:, ind].T for sig, ind in zip(sigs, indices)]
+
+    assert len({v.shape for v in vcgs}) == 1
+
+    time = siglen / fs
+    x = np.linspace(0, time, siglen)
+    fig = plt.figure(**fig_kw)
+    nsig = len(signals)
+
+    axes = fig.subplots(nrows=nsig, sharex=True)
+    if nsig == 1:
+        axes = np.array([axes])
+
+    for i, (ylabel, ax) in enumerate(zip(signals, axes.reshape(-1))):
+        ax.set_prop_cycle(cycler('color', ['k', 'm', 'c', 'y']))
+
+        for vcg, label in zip(vcgs, labels):
+            v = sigtransform(vcg[i])
+            ax.plot(x, v, label=label)
+
+        ax.set_xlabel('time/s')
+        ax.set_ylabel(ylabel + '/mV')
+
+    plt.figlegend()
     return fig

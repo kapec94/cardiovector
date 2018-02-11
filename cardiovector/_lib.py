@@ -1,67 +1,57 @@
-from cardiovector.transform import identity
+import wfdb
+import numpy as np
 
 
 def getindices(rec, sigs):
     return list(map(rec.signame.index, sigs))
 
 
-def plot_vcgs(records, labels, transform=identity, figsize=None):
-    """
-    Plot VCG signals (vx, vy, vz) from multiple records, in order to compare them.
+def iterfy(iterable):
+    if isinstance(iterable, str):
+        iterable = [iterable]
+    try:
+        iter(iterable)
+    except TypeError:
+        iterable = [iterable]
+    return iterable
 
-    Parameters
-    ----------
-    records : (N,) array-like of wfdb.Record objects
-        Iterable of records containing VCG signals.
 
-    labels : (N,) array-like
-        Iterable of signal labels.
+def copy_record(r):
+    assert isinstance(r, wfdb.Record)
 
-    transform : function(X -> ndarray) -> ndarray, optional
-        Function to call on every signal about to be plotted.
+    def c_(a): return None if a is None else np.array(a, copy=True)
+    return wfdb.Record(c_(r.p_signals), c_(r.d_signals), c_(r.e_p_signals), c_(r.e_d_signals),
+                       r.recordname, r.nsig, r.fs, r.counterfreq, r.basecounter, r.siglen,
+                       r.basetime, r.basedate, r.filename, r.fmt, r.sampsperframe, r.skew, r.byteoffset,
+                       r.adcgain, r.baseline, r.units, r.adcres, r.adczero, r.initvalue, r.checksum, r.blocksize,
+                       r.signame, r.comments)
 
-    figsize : (2,) array-like, optional
-        Figure size as configure in matplotlib.
 
-    Returns
-    -------
-    matplotlib.pyplot.Figure
-        Plotted Figure object.
-    """
+def get_analog(r):
+    return _get_adac(r.p_signals, r.dac)
 
-    from cycler import cycler
-    from numpy import linspace
-    import matplotlib.pyplot as plt
 
-    assert (len(records) == len(labels))
-    assert (len({r.fs for r in records}) == 1)
-    assert (len({r.siglen for r in records}) == 1)
+def get_digital(r):
+    return _get_adac(r.d_signals, r.adc)
 
-    signames = ['vx', 'vy', 'vz']
 
-    fs = records[0].fs
-    siglen = records[0].siglen
+def _get_adac(sig, get):
+    if sig is None or sig.shape == ():
+        return get()
+    else:
+        return sig
 
-    def _getindices(rec, sigs):
-        return list(map(rec.signame.index, sigs))
 
-    indices = [_getindices(rec, signames) for rec in records]
-    vcgs = [rec.p_signals[:, ind].T for rec, ind in zip(records, indices)]
+def validate_adac(record):
+    fmt = _get_uniq(record.fmt)
+    adcgain = _get_uniq(record.adcgain)
+    baseline = _get_uniq(record.baseline)
+    return fmt, adcgain, baseline
 
-    assert (len({v.shape for v in vcgs}) == 1)
 
-    x = linspace(0, siglen / fs, siglen)
+def _get_uniq(vals):
+    s = set(vals)
+    if len(s) != 1:
+        raise ValueError('Could not get an unique value')
 
-    fig = plt.figure(figsize=(figsize or (10, 8)))
-    axes = fig.subplots(nrows=3, sharex=True)
-
-    for i, (ylabel, ax) in enumerate(zip(signames, axes.reshape(-1))):
-        ax.set_prop_cycle(cycler('color', ['k', 'm', 'c', 'y']))
-        for vcg, label in zip(vcgs, labels):
-            v = transform(vcg[i])
-            ax.plot(x, v, label=label)
-        ax.set_xlabel('time/s')
-        ax.set_ylabel(ylabel + '/V')
-
-    plt.figlegend()
-    return fig
+    return vals[0]
