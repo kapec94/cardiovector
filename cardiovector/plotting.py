@@ -10,7 +10,7 @@ from cardiovector import transform
 from ._lib import iterfy, getindices, get_analog
 
 
-def _adjust_lim(lim, signal):
+def _adjust_lim(lim: (int, int), signal: np.ndarray):
     if lim is not None:
         if len(lim) == 2:
             return lim
@@ -25,7 +25,7 @@ _vcg_plot_types = ['3d', 'frontal', 'transverse', 'saggital']
 PlotParams = namedtuple('PlotParams', 'x, y, z, xlim, ylim, zlim')
 
 
-def _plot_3d(sp, p, plot_kw):
+def _plot_3d(sp: int, p: PlotParams, plot_kw: dict):
     ax = plt.subplot(sp, projection='3d')
     assert isinstance(ax, Axes3D)
 
@@ -39,7 +39,9 @@ def _plot_3d(sp, p, plot_kw):
     ax.plot(p.x, p.y, p.z, zdir='y', **plot_kw)
 
 
-def _plot_2d(ax, xlabel, ylabel, x, y, xlim, ylim, plot_kw):
+def _plot_2d(ax: plt.Axes, xlabel: str, ylabel: str,
+             x: np.ndarray, y: np.ndarray,
+             xlim, ylim, plot_kw):
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
     ax.axhline(0, c='k')
@@ -100,7 +102,7 @@ def _signame_hash(signame):
     return '#'.join(sorted(signame))
 
 
-def _validate_signals_arg(record, signals):
+def _validate_signals_arg(record: wfdb.Record, signals):
     assert record is not None
     record = iterfy(record)
 
@@ -116,7 +118,7 @@ def _validate_signals_arg(record, signals):
     return signals
 
 
-def plotvcg(record, signals=None,
+def plotvcg(record: wfdb.Record, signals=None,
             plot='3d',
             xlim=None, ylim=None, zlim=None,
             figsize=4,
@@ -186,7 +188,7 @@ def plotvcg(record, signals=None,
     data = dict()
     lims = dict()
     for k, s in zip(k_, signals):
-        index = record.signame.index(s)
+        index = record.sig_name.index(s)
         psig = get_analog(record)[:, index].T
 
         data[k] = psig
@@ -205,7 +207,7 @@ def plotvcg(record, signals=None,
     return fig
 
 
-def plotrecs(record, signals=None, labels=None, sigtransform=None, fig_kw=None):
+def plotrecs(record: wfdb.Record, signals=None, labels=None, sigtransform=None, fig_kw=None):
     """
     Plot multiple WFDB records.
 
@@ -243,13 +245,13 @@ def plotrecs(record, signals=None, labels=None, sigtransform=None, fig_kw=None):
     if labels is not None:
         assert (len(record) == len(labels))
     else:
-        labels = [r.recordname for r in record]
+        labels = [r.record_name for r in record]
 
     if len({r.fs for r in record}) != 1:
         raise ValueError('Records have different sampling rates. Will not continue!')
 
     fs = record[0].fs
-    siglen = np.max([r.siglen for r in record])
+    siglen = np.max([r.sig_len for r in record])
     indices = [getindices(rec, signals) for rec in record]
 
     sigs = [get_analog(rec) for rec in record]

@@ -1,40 +1,48 @@
 import numpy as np
+import wfdb
 from sklearn.decomposition import PCA
 
 from cardiovector.transform import identity
-from ._lib import getindices, get_digital, validate_adac
+from ._lib import get_digital, validate_adac
 
 
 class ReconstructionBase:
-    def reconstruct(self, record):
+    def reconstruct(self, record: wfdb.Record):
         from wfdb import Record
 
         fmt, adcgain, baseline = validate_adac(record)
-        signal_indices = [record.signame.index(sig) for sig in self.channels()]
+
+        channels = self.channels()
+        signal_indices = [record.sig_name.index(sig) for sig in channels]
 
         digital = get_digital(record)
 
-        input_vectors = digital[:, signal_indices]
+        input_vectors_raw = digital[:, signal_indices]
+        input_vectors = np.array([self._preprocess(c, s) for c, s in zip(channels, input_vectors_raw.T)]).T
+
         output_vectors = self._reconstruct(input_vectors)
         nsig = output_vectors.shape[1]
 
-        name = self._nametransform(record.recordname)
-        return Record(recordname=name,
-                      nsig=nsig, d_signals=output_vectors,
-                      fs=record.fs, siglen=record.siglen,
+        name = self._nametransform(record.record_name)
+        return Record(record_name=name,
+                      n_sig=nsig, d_signal=output_vectors,
+                      fs=record.fs, sig_len=record.sig_len,
                       fmt=[fmt] * nsig,
-                      adcgain=[adcgain] * nsig,
+                      adc_gain=[adcgain] * nsig,
                       baseline=[baseline] * nsig,
-                      signame=['vx', 'vy', 'vz'],
+                      sig_name=['vx', 'vy', 'vz'],
                       units=['mV', 'mv', 'mv'])
 
-    def channels(self):
+    def channels(self) -> list:
         raise NotImplementedError()
 
-    def _nametransform(self, name):
+    def _nametransform(self, name: str) -> str:
         return name
 
-    def _reconstruct(self, input_vectors):
+    def _preprocess(self, channel_name: str, signal: np.ndarray):
+        return signal
+
+    def _reconstruct(self, input_vectors: np.ndarray):
         raise NotImplementedError()
 
 

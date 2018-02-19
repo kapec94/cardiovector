@@ -85,14 +85,17 @@ def remove_baseline_wandering(record, wavelet_level=None):
     if not isinstance(record, wfdb.Record):
         raise ValueError('Not a wfdb.Record. For sigle signals, use remove_baseline_wandering_s.')
 
+    if record.d_signal is None:
+        raise ValueError('Record should have digital signals')
+
     record = copy_record(record)
 
-    data_len = record.siglen
+    data_len = record.sig_len
     (wavelet, level) = _wavelet_for_signal(data_len, wavelet_level)
 
-    for i in range(record.nsig):
-        signal = record.p_signals[:, i]
-        record.p_signals[:, i] = remove_baseline_wandering_s(signal, (wavelet, level))
+    for i in range(record.n_sig):
+        signal = record.d_signal[:, i]
+        record.d_signal[:, i] = remove_baseline_wandering_s(signal, (wavelet, level))
 
     record.comments.append('Filtering: removed base wandering')
     return record
@@ -147,10 +150,10 @@ def recslice(record, sampfrom=None, sampto=None):
     if sampto is None:
         sampto = record.siglen
 
-    record.p_signals = _slice_if_present(record.p_signals, sampfrom, sampto)
-    record.d_signals = _slice_if_present(record.d_signals, sampfrom, sampto)
+    record.p_signal = _slice_if_present(record.p_signal, sampfrom, sampto)
+    record.d_signal = _slice_if_present(record.d_signal, sampfrom, sampto)
 
-    record.siglen = sampto - sampfrom
+    record.sig_len = sampto - sampfrom
 
     record.comments.append('Preprocessing: slice of an original signal (%d..%d)'.format(sampto, sampfrom))
     return record
