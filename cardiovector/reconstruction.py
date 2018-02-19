@@ -100,7 +100,7 @@ class PcaReconstruction(ReconstructionBase):
         pca = PCA(n_components=1)
         out = pca.fit_transform(signals)
 
-        return out[:, 0]
+        return -out[:, 0]
 
 
 def vcg_reconstruct_matrix(record, matrix, channels, nametransform=identity):
