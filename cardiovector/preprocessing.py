@@ -61,7 +61,14 @@ def remove_baseline_wandering_s(signal, wavelet_level=None):
     ca10_orig, *cDn = pywt.wavedecn(signal, wavelet)
     ca10 = np.zeros(ca10_orig.shape)
 
-    return pywt.waverecn([ca10, *cDn], wavelet)
+    result = pywt.waverecn([ca10, *cDn], wavelet)
+    so = result.shape[0]
+    si = signal.shape[0]
+    if so > si:
+        n = si - so
+        result = result[:n]
+
+    return result
 
 
 def remove_baseline_wandering(record, wavelet_level=None):
