@@ -2,15 +2,11 @@ import numpy as np
 import wfdb
 from sklearn.decomposition import PCA
 
-from ._lib import get_digital, validate_adac
+from ._lib import get_digital, prepare_reshaped
 
 
 class ReconstructionBase:
     def reconstruct(self, record: wfdb.Record):
-        from wfdb import Record
-
-        fmt, adcgain, baseline = validate_adac(record)
-
         channels = self.channels()
         signal_indices = [record.sig_name.index(sig) for sig in channels]
 
@@ -22,14 +18,14 @@ class ReconstructionBase:
         output_vectors = self._reconstruct(input_vectors)
         nsig = output_vectors.shape[1]
 
-        return Record(record_name=record.record_name,
-                      n_sig=nsig, d_signal=output_vectors,
-                      fs=record.fs, sig_len=record.sig_len,
-                      fmt=[fmt] * nsig,
-                      adc_gain=[adcgain] * nsig,
-                      baseline=[baseline] * nsig,
-                      sig_name=['vx', 'vy', 'vz'],
-                      units=['mV', 'mv', 'mv'])
+        new_rec = prepare_reshaped(record, nsig, record.sig_len,
+                                   file_name=[record.record_name + '.dat'] * nsig,
+                                   sig_name=['vx', 'vy', 'vz'],
+                                   init_value=list(output_vectors[0].astype('int')))
+        new_rec.d_signal = output_vectors
+        new_rec.checksum = new_rec.calc_checksum()
+
+        return new_rec
 
     def channels(self) -> list:
         raise NotImplementedError()
@@ -59,7 +55,7 @@ class MatrixReconstruction(ReconstructionBase):
         return self._channels
 
     def _reconstruct(self, input_vectors):
-        return np.dot(self._matrix, input_vectors.T).A.T
+        return np.dot(self._matrix, input_vectors.T).A.T.astype('int16')
 
 
 pca_channels = ['i', 'v5', 'v6', 'ii', 'iii', 'avf', 'v1', 'v2', 'v3']
@@ -84,7 +80,7 @@ class PcaReconstruction(ReconstructionBase):
             output = self._sig_pca(sig)
             output_vectors.append(output)
 
-        return np.array(output_vectors).T
+        return np.array(output_vectors).T.astype('int16')
 
     @staticmethod
     def _sig_pca(signals):
