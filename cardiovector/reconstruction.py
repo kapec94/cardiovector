@@ -2,7 +2,6 @@ import numpy as np
 import wfdb
 from sklearn.decomposition import PCA
 
-from cardiovector.transform import identity
 from ._lib import get_digital, validate_adac
 
 
@@ -23,8 +22,7 @@ class ReconstructionBase:
         output_vectors = self._reconstruct(input_vectors)
         nsig = output_vectors.shape[1]
 
-        name = self._nametransform(record.record_name)
-        return Record(record_name=name,
+        return Record(record_name=record.record_name,
                       n_sig=nsig, d_signal=output_vectors,
                       fs=record.fs, sig_len=record.sig_len,
                       fmt=[fmt] * nsig,
@@ -36,9 +34,6 @@ class ReconstructionBase:
     def channels(self) -> list:
         raise NotImplementedError()
 
-    def _nametransform(self, name: str) -> str:
-        return name
-
     def _preprocess(self, channel_name: str, signal: np.ndarray):
         return signal
 
@@ -47,7 +42,7 @@ class ReconstructionBase:
 
 
 class MatrixReconstruction(ReconstructionBase):
-    def __init__(self, channels, matrix, nametransform=identity):
+    def __init__(self, channels, matrix):
         if not hasattr(channels, '__iter__') or isinstance(channels, str):
             raise ValueError('Channels must be non-empty array-like')
 
@@ -56,7 +51,6 @@ class MatrixReconstruction(ReconstructionBase):
 
         self._channels = channels
         self._matrix = matrix
-        self._nametrans = nametransform
 
     def matrix(self):
         return self._matrix
@@ -66,9 +60,6 @@ class MatrixReconstruction(ReconstructionBase):
 
     def _reconstruct(self, input_vectors):
         return np.dot(self._matrix, input_vectors.T).A.T
-
-    def _nametransform(self, name):
-        return self._nametrans(name)
 
 
 pca_channels = ['i', 'v5', 'v6', 'ii', 'iii', 'avf', 'v1', 'v2', 'v3']
@@ -103,7 +94,7 @@ class PcaReconstruction(ReconstructionBase):
         return -out[:, 0]
 
 
-def vcg_reconstruct_matrix(record, matrix, channels, nametransform=identity):
+def vcg_reconstruct_matrix(record, matrix, channels):
     """
     Reconstruct VCG from 12-lead ECG using a matrix reconstruction algorithm.
 
@@ -118,8 +109,6 @@ def vcg_reconstruct_matrix(record, matrix, channels, nametransform=identity):
     channels : (M,) array-like
         channel names to retrieve signals from the record.
 
-    nametransform : function(x -> string)
-        function that will be used to create output record name from input record name.
 
     Returns
     -------
@@ -127,7 +116,7 @@ def vcg_reconstruct_matrix(record, matrix, channels, nametransform=identity):
         Record object containing reconstructed VCG signal.
     """
 
-    reconstruction = MatrixReconstruction(channels, matrix, nametransform)
+    reconstruction = MatrixReconstruction(channels, matrix)
     return reconstruction.reconstruct(record)
 
 
@@ -152,7 +141,7 @@ def kors_vcg(record):
         Record object containing reconstructed VCG signal.
     """
 
-    return vcg_reconstruct_matrix(record, kors, kors_channels, nametransform=lambda x: x + '_kors')
+    return vcg_reconstruct_matrix(record, kors, kors_channels)
 
 
 idt_channels = ['v1', 'v2', 'v3', 'v4', 'v5', 'v6', 'i', 'ii']
@@ -176,7 +165,7 @@ def idt_vcg(record):
         Record object containing reconstructed VCG signal.
     """
 
-    return vcg_reconstruct_matrix(record, idt, idt_channels, nametransform=lambda x: x + '_idt')
+    return vcg_reconstruct_matrix(record, idt, idt_channels)
 
 
 def pca_vcg(record):

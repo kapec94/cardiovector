@@ -6,7 +6,6 @@ import wfdb
 from cycler import cycler
 from mpl_toolkits.mplot3d import Axes3D
 
-from cardiovector import transform
 from ._lib import iterfy, getindices, get_analog
 
 
@@ -207,7 +206,7 @@ def plotvcg(record: wfdb.Record, signals=None,
     return fig
 
 
-def plotrecs(record: wfdb.Record, signals=None, labels=None, sigtransform=None, fig_kw=None):
+def plotrecs(record: wfdb.Record, signals=None, labels=None, fig_kw=None):
     """
     Plot multiple WFDB records.
 
@@ -221,9 +220,6 @@ def plotrecs(record: wfdb.Record, signals=None, labels=None, sigtransform=None, 
 
     labels : (N,) array-like of str, optional
         Labels to assign to plotted signals. By default this will be record names.
-
-    sigtransform : function(X -> ndarray) -> ndarray, optional
-        Function to call on every signal about to be plotted.
 
     fig_kw : dict, optional
         Additional positional arguments for creating a `matplotlib.pyplot.Figure` object.
@@ -240,7 +236,6 @@ def plotrecs(record: wfdb.Record, signals=None, labels=None, sigtransform=None, 
     signals = _validate_signals_arg(record, signals)
 
     fig_kw = fig_kw or dict()
-    sigtransform = sigtransform or transform.identity
 
     if labels is not None:
         assert (len(record) == len(labels))
@@ -272,8 +267,7 @@ def plotrecs(record: wfdb.Record, signals=None, labels=None, sigtransform=None, 
         ax.set_prop_cycle(cycler('color', ['k', 'm', 'c', 'y']))
 
         for vcg, label in zip(vcgs, labels):
-            v = sigtransform(vcg[i])
-            ax.plot(x, v, label=label)
+            ax.plot(x, vcg[i], label=label)
 
         ax.set_xlabel('time/s')
         ax.set_ylabel(ylabel + '/mV')
