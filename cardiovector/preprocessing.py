@@ -108,11 +108,42 @@ def remove_baseline_wandering(record, wavelet_level=None):
     return record
 
 
+def remove_noise(record):
+    if not isinstance(record, wfdb.Record):
+        raise ValueError('Not a wfdb.Record. For single signals, use remove_noise_s.')
+
+    if record.d_signal is None:
+        raise ValueError('Record should have digital signals')
+
+    record = copy_record(record)
+
+    for i in range(record.n_sig):
+        signal = record.d_signal[:, i]
+        record.d_signal[:, i] = remove_noise_s(signal)
+
+    record.comments.append('Filtering: removed noise')
+    return record
+
+
+def remove_noise_s(signal, threshold=3):
+    coeffs = pywt.swt(signal, 'sym8', level=10)
+    for i in range(threshold):
+        _zero_coeff(coeffs, -(i+1))
+
+    out = pywt.iswt(coeffs, 'sym8')
+    return out
+
+
 def _wavelet_for_signal(data_len, fallback):
     if fallback is None:
         return choose_wavelet(data_len)
     else:
         return fallback
+
+
+def _zero_coeff(where, which):
+    ca, cd = where[which]
+    where[which] = (np.zeros(ca.shape), np.zeros(cd.shape))
 
 
 _wavelets = [('sym10', 10), ('db2', 10)]
