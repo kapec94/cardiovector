@@ -108,7 +108,7 @@ def _validate_signals_arg(record: wfdb.Record, signals):
     assert len(record) > 0
 
     if signals is None:
-        sigs = {_signame_hash(r.signame) for r in record}
+        sigs = {_signame_hash(r.sig_name) for r in record}
         if len(sigs) > 1:
             raise ValueError('Records have different signal set. Don\'t know which to choose')
 
